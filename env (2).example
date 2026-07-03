@@ -1,0 +1,230 @@
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from .models import RoleEnum, MoodEnum, AssessmentTypeEnum, RiskLevelEnum, AppointmentModeEnum, AppointmentStatusEnum
+
+
+# ---------- Auth ----------
+
+class UserRegister(BaseModel):
+    full_name: str = Field(min_length=2, max_length=80)
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=72)
+    role: RoleEnum = RoleEnum.student
+    department: Optional[str] = None
+    year: Optional[str] = None
+    is_hostel: bool = False
+    specialization: Optional[str] = None  # only used when role == counsellor
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserOut"
+
+
+class UserOut(BaseModel):
+    id: int
+    full_name: str
+    email: EmailStr
+    role: RoleEnum
+    anonymous_id: str
+    department: Optional[str] = None
+    year: Optional[str] = None
+    is_hostel: bool
+    specialization: Optional[str] = None
+    rating: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Mood ----------
+
+class MoodCheckIn(BaseModel):
+    mood: MoodEnum
+    sleep_hours: float = Field(ge=0, le=24, default=7)
+    stress_level: int = Field(ge=0, le=10, default=5)
+    journal: Optional[str] = Field(default=None, max_length=2000)
+
+
+class MoodOut(BaseModel):
+    id: int
+    mood: MoodEnum
+    sleep_hours: float
+    stress_level: int
+    journal: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Assessments ----------
+
+class AssessmentSubmit(BaseModel):
+    type: AssessmentTypeEnum
+    answers: List[int] = Field(min_length=1)
+
+    @field_validator("answers")
+    @classmethod
+    def validate_answers(cls, v):
+        if any(a < 0 or a > 3 for a in v):
+            raise ValueError("Each answer must be between 0 and 3")
+        return v
+
+
+class AssessmentOut(BaseModel):
+    id: int
+    type: AssessmentTypeEnum
+    answers: List[int]
+    score: int
+    risk_level: RiskLevelEnum
+    high_risk_flag: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Chat ----------
+
+class ChatSend(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    session_id: Optional[str] = None
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    crisis_flag: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChatReply(BaseModel):
+    session_id: str
+    reply: str
+    crisis: bool
+    crisis_resources: Optional[List[Dict[str, str]]] = None
+    history: List[ChatMessageOut]
+
+
+# ---------- Resources ----------
+
+class ResourceCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    category: str
+    type: str
+    duration_minutes: int = Field(ge=1, le=180, default=5)
+    language: str = "English"
+
+
+class ResourceOut(BaseModel):
+    id: int
+    title: str
+    category: str
+    type: str
+    duration_minutes: int
+    language: str
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Appointments ----------
+
+class CounsellorOut(BaseModel):
+    id: int
+    full_name: str
+    specialization: Optional[str]
+    rating: Optional[float]
+
+    class Config:
+        from_attributes = True
+
+
+class AppointmentBook(BaseModel):
+    counsellor_id: int
+    mode: AppointmentModeEnum = AppointmentModeEnum.online
+    anonymous: bool = True
+    scheduled_time: datetime
+
+
+class AppointmentOut(BaseModel):
+    id: int
+    counsellor_id: int
+    student_id: int
+    mode: AppointmentModeEnum
+    anonymous: bool
+    scheduled_time: datetime
+    status: AppointmentStatusEnum
+    qr_code: str
+    counsellor_name: Optional[str] = None
+    student_display: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AppointmentStatusUpdate(BaseModel):
+    status: AppointmentStatusEnum
+
+
+# ---------- Peer Support ----------
+
+class ForumPostCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=1000)
+    tag: str = Field(default="Support", max_length=30)
+
+
+class ForumPostOut(BaseModel):
+    id: int
+    author_display: str
+    content: str
+    tag: str
+    reply_count: int
+    report_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Notifications ----------
+
+class NotificationOut(BaseModel):
+    id: int
+    type: str
+    message: str
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Admin ----------
+
+class AdminAnalytics(BaseModel):
+    avg_stress_score: float
+    students_screened: int
+    total_students: int
+    high_risk_flags: int
+    active_chats_7d: int
+    department_stress: List[Dict[str, Any]]
+    monthly_trend: List[Dict[str, Any]]
+    hostel_split: List[Dict[str, Any]]
+
+
+Token.model_rebuild()
